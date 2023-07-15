@@ -13,7 +13,7 @@ VolumeMonitor::VolumeMonitor(Audio* audio, AudioDevice& device) : cRef_(1), audi
     
     // Activalte volume endpoint
     endpointVolume_ = nullptr;
-    hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&endpointVolume_);
+    hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&endpointVolume_);
     if (FAILED(hr)) {
         printf("Failed to activate IAudioEndpointVolume: %x\n", hr);
         exit(1);
@@ -50,14 +50,14 @@ HRESULT STDMETHODCALLTYPE VolumeMonitor::QueryInterface(REFIID riid, VOID **ppvI
         AddRef();
         *ppvInterface = (IAudioEndpointVolumeCallback*)this;
     } else {
-        *ppvInterface = NULL;
+        *ppvInterface = nullptr;
         return E_NOINTERFACE;
     }
     return S_OK;
 }
 
 HRESULT STDMETHODCALLTYPE VolumeMonitor::OnNotify(PAUDIO_VOLUME_NOTIFICATION_DATA pNotify) {
-    if (pNotify == NULL) {
+    if (pNotify == nullptr) {
         return E_INVALIDARG;
     }
 
@@ -92,8 +92,8 @@ AudioDevice::~AudioDevice() {
 
 std::wstring AudioDevice::getName() const {
     HRESULT hr;
-    IPropertyStore *pProps = NULL;
-    LPWSTR pwszID = NULL;
+    IPropertyStore *pProps = nullptr;
+    LPWSTR pwszID = nullptr;
 
     hr = device_->OpenPropertyStore(STGM_READ, &pProps);
     if (FAILED(hr)) {
@@ -119,15 +119,15 @@ std::wstring AudioDevice::getName() const {
 
 void AudioDevice::setVolume(float volume) {
     HRESULT hr;
-    IAudioEndpointVolume* pAudioEndpointVolume = NULL;
+    IAudioEndpointVolume* pAudioEndpointVolume = nullptr;
 
-    hr = device_->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, NULL, (void**)&pAudioEndpointVolume);
+    hr = device_->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pAudioEndpointVolume);
     if (FAILED(hr)) {
         printf("Failed to activate endpoint volume: %x\n", hr);
         return;
     }
 
-    hr = pAudioEndpointVolume->SetMasterVolumeLevelScalar(volume, NULL);
+    hr = pAudioEndpointVolume->SetMasterVolumeLevelScalar(volume, nullptr);
     if (FAILED(hr)) {
         printf("Failed to set master volume level: %x\n", hr);
         pAudioEndpointVolume->Release();
@@ -141,15 +141,20 @@ void AudioDevice::setVolume(float volume) {
 // Audio
 
 Audio::Audio() : volumeMonitor_(nullptr) {
-    HRESULT hr = CoInitialize(NULL);
+    HRESULT hr = CoInitialize(nullptr);
+    if (FAILED(hr)) {
+        printf("Failed to initialize COM: %x\n", hr);
+        exit(1);
+    }
+    updateDefaultDevice();
 }
 
 AudioDevice&& Audio::getDefaultDevice() {
     HRESULT hr;
-    IMMDeviceEnumerator* pEnumerator = NULL;
-    IMMDevice* pDevice = NULL;
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    IMMDevice* pDevice = nullptr;
 
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
         printf("Failed to create device enumerator: %x\n", hr);
         exit(1);
@@ -170,13 +175,13 @@ AudioDevice&& Audio::getDefaultDevice() {
 
 AudioDevice* Audio::getDevice(const std::wstring& deviceName) {
     HRESULT hr;
-    IMMDeviceEnumerator *pEnumerator = NULL;
-    IMMDeviceCollection *pCollection = NULL;
-    IMMDevice *pDevice = NULL;
-    IPropertyStore *pProps = NULL;
-    LPWSTR pwszID = NULL;
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDeviceCollection *pCollection = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IPropertyStore *pProps = nullptr;
+    LPWSTR pwszID = nullptr;
 
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
         __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
         printf("Failed to create MMDeviceEnumerator: %x\n", hr);
@@ -249,14 +254,14 @@ AudioDevice* Audio::getDevice(const std::wstring& deviceName) {
 
 std::vector<std::wstring> Audio::getDevices() {
     HRESULT hr;
-    IMMDeviceEnumerator *pEnumerator = NULL;
-    IMMDeviceCollection *pCollection = NULL;
-    IMMDevice *pDevice = NULL;
-    IPropertyStore *pProps = NULL;
-    LPWSTR pwszID = NULL;
+    IMMDeviceEnumerator *pEnumerator = nullptr;
+    IMMDeviceCollection *pCollection = nullptr;
+    IMMDevice *pDevice = nullptr;
+    IPropertyStore *pProps = nullptr;
+    LPWSTR pwszID = nullptr;
 
 
-    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL,
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
         __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
     if (FAILED(hr)) {
         printf("Failed to create MMDeviceEnumerator: %x\n", hr);
@@ -338,6 +343,7 @@ void Audio::addSyncTo(const std::wstring& targetName) {
         std::wcerr << L"Failed to find device " << targetName << std::endl;
     }
     deviceTargets_.push_back(std::move(*device));
+    resyncVolume();
 }
 
 void Audio::removeSyncTo(const std::wstring& targetName) {
@@ -358,10 +364,50 @@ void Audio::updateDefaultDevice() {
 
     deviceSrc_ = std::make_unique<AudioDevice>(getDefaultDevice());
     volumeMonitor_ = new VolumeMonitor(this, *deviceSrc_);
+
+    // Remove it from the list of targets if it's there
+    removeSyncTo(deviceSrc_->getName());
+    
+    resyncVolume();
 }
 
 void Audio::setVolume(float volume) {
     for (auto& device : deviceTargets_) {
         device.setVolume(volume);
     }
+}
+
+std::set<std::wstring> Audio::getSyncedDevices() const {
+    std::set<std::wstring> devices;
+    for (const auto& device : deviceTargets_) {
+        devices.insert(device.getName());
+    }
+    return devices;
+}
+
+void Audio::resyncVolume() {
+    if (!deviceSrc_) {
+        return;
+    }
+
+    HRESULT hr;
+    IAudioEndpointVolume* pAudioEndpointVolume = nullptr;
+
+    hr = (*deviceSrc_)->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, (void**)&pAudioEndpointVolume);
+    if (FAILED(hr)) {
+        printf("Failed to activate endpoint volume: %x\n", hr);
+        return;
+    }
+
+    float volume;
+    hr = pAudioEndpointVolume->GetMasterVolumeLevelScalar(&volume);
+    if (FAILED(hr)) {
+        printf("Failed to get master volume level: %x\n", hr);
+        pAudioEndpointVolume->Release();
+        return;
+    }
+
+    pAudioEndpointVolume->Release();
+
+    setVolume(volume);
 }

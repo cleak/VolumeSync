@@ -4,6 +4,7 @@
 #include <list>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -77,6 +78,10 @@ class Audio {
 
     void updateDefaultDevice();
     void setVolume(float volume);
+
+    void resyncVolume();
+
+    std::set<std::wstring> getSyncedDevices() const;
 
   private:
     std::unique_ptr<AudioDevice> deviceSrc_;
