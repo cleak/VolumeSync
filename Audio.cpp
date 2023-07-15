@@ -6,6 +6,8 @@
 
 #include <Functiondiscoverykeys_devpkey.h>
 
+#include "Config.h"
+
 //----------------------------------------------------------------------------------
 // Volume Monitor
 VolumeMonitor::VolumeMonitor(Audio* audio, AudioDevice& device) : cRef_(1), audio_(audio) {
@@ -146,6 +148,7 @@ Audio::Audio() : volumeMonitor_(nullptr) {
         printf("Failed to initialize COM: %x\n", hr);
         exit(1);
     }
+    loadTargetList();
     updateDefaultDevice();
 }
 
@@ -169,7 +172,6 @@ AudioDevice&& Audio::getDefaultDevice() {
 
     pEnumerator->Release();
 
-    // return std::move(AudioDevice(pDevice));
     return std::move(*(new AudioDevice(pDevice)));
 }
 
@@ -340,9 +342,12 @@ Audio::~Audio() {
 void Audio::addSyncTo(const std::wstring& targetName) {
     auto device = getDevice(targetName);
     if (!device) {
-        std::wcerr << L"Failed to find device " << targetName << std::endl;
+        std::wcerr << L"Failed to find device: " << targetName << std::endl;
+        return;
     }
     deviceTargets_.push_back(std::move(*device));
+
+    saveTargetList();
     resyncVolume();
 }
 
@@ -352,6 +357,27 @@ void Audio::removeSyncTo(const std::wstring& targetName) {
             deviceTargets_.erase(it);
             break;
         }
+    }
+
+    saveTargetList();
+}
+
+void Audio::saveTargetList() {
+    std::vector<std::wstring> deviceNames;
+    for (const auto& device : deviceTargets_) {
+        deviceNames.push_back(device.getName());
+    }
+    WriteSyncDevices(deviceNames);
+}
+
+void Audio::loadTargetList() {
+    std::vector<std::wstring> deviceNames;
+    if (!ReadSyncDevices(deviceNames)) {
+        return;
+    }
+
+    for (const auto& deviceName : deviceNames) {
+        addSyncTo(deviceName);
     }
 }
 
@@ -367,7 +393,7 @@ void Audio::updateDefaultDevice() {
 
     // Remove it from the list of targets if it's there
     removeSyncTo(deviceSrc_->getName());
-    
+
     resyncVolume();
 }
 

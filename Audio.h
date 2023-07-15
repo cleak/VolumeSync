@@ -84,6 +84,9 @@ class Audio {
     std::set<std::wstring> getSyncedDevices() const;
 
   private:
+    void saveTargetList();
+    void loadTargetList();
+
     std::unique_ptr<AudioDevice> deviceSrc_;
     std::list<AudioDevice> deviceTargets_;
     VolumeMonitor* volumeMonitor_;
