@@ -140,6 +140,71 @@ void AudioDevice::setVolume(float volume) {
 }
 
 //----------------------------------------------------------------------------------
+// DeviceChangeMonitor
+
+DeviceChangeMonitor::DeviceChangeMonitor(Audio* audio)
+        : audio_(audio), cRef_(1), deviceEnumerator_(nullptr) {
+    HRESULT hr;
+
+    hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&deviceEnumerator_);
+    if (FAILED(hr)) {
+        printf("Failed to create device enumerator: %x\n", hr);
+        exit(1);
+    }
+
+    hr = deviceEnumerator_->RegisterEndpointNotificationCallback((IMMNotificationClient*)this);
+    if (FAILED(hr)) {
+        printf("Failed to register endpoint notification callback: %x\n", hr);
+        exit(1);
+    }
+}
+
+DeviceChangeMonitor::~DeviceChangeMonitor() {
+    HRESULT hr;
+
+    hr = deviceEnumerator_->UnregisterEndpointNotificationCallback((IMMNotificationClient*)this);
+    if (FAILED(hr)) {
+        printf("Failed to unregister endpoint notification callback: %x\n", hr);
+        exit(1);
+    }
+
+    deviceEnumerator_->Release();
+}
+
+STDMETHODIMP DeviceChangeMonitor::QueryInterface(REFIID riid, VOID **ppvInterface) {
+    if (IID_IUnknown == riid) {
+        AddRef();
+        *ppvInterface = (IUnknown*)this;
+    } else if (__uuidof(IMMNotificationClient) == riid) {
+        AddRef();
+        *ppvInterface = (IMMNotificationClient*)this;
+    } else {
+        *ppvInterface = NULL;
+        return E_NOINTERFACE;
+    }
+    return S_OK;
+}
+
+STDMETHODIMP_(ULONG) DeviceChangeMonitor::AddRef() {
+    return InterlockedIncrement(&cRef_);
+}
+
+STDMETHODIMP_(ULONG) DeviceChangeMonitor::Release() {
+    ULONG ulRef = InterlockedDecrement(&cRef_);
+    if (0 == ulRef) {
+        delete this;
+    }
+    return ulRef;
+}
+
+STDMETHODIMP DeviceChangeMonitor::OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId) {
+    if (flow == eRender && role == eConsole) {
+        audio_->updateDefaultDevice();
+    }
+    return S_OK;
+}
+
+//----------------------------------------------------------------------------------
 // Audio
 
 Audio::Audio() : volumeMonitor_(nullptr) {
@@ -150,6 +215,7 @@ Audio::Audio() : volumeMonitor_(nullptr) {
     }
     loadTargetList();
     updateDefaultDevice();
+    deviceChangeMonitor_ = std::make_unique<DeviceChangeMonitor>(this);
 }
 
 AudioDevice&& Audio::getDefaultDevice() {
@@ -171,6 +237,8 @@ AudioDevice&& Audio::getDefaultDevice() {
     }
 
     pEnumerator->Release();
+
+    deviceChangeMonitor_.reset();
 
     return std::move(*(new AudioDevice(pDevice)));
 }

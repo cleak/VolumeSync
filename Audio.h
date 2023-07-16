@@ -60,6 +60,31 @@ class VolumeMonitor : public IAudioEndpointVolumeCallback {
     IAudioEndpointVolume* endpointVolume_;
 };
 
+// Listener for when the default audio device changes.
+class DeviceChangeMonitor : public IMMNotificationClient {
+  public:
+    explicit DeviceChangeMonitor(Audio* audio);
+    ~DeviceChangeMonitor();
+
+    // IUnknown methods
+    STDMETHODIMP QueryInterface(REFIID riid, VOID **ppvInterface);
+    STDMETHODIMP_(ULONG) AddRef();
+    STDMETHODIMP_(ULONG) Release();
+
+    // IMMNotificationClient methods
+    STDMETHODIMP OnDeviceAdded(LPCWSTR pwstrDeviceId) { return S_OK; }
+    STDMETHODIMP OnDeviceRemoved(LPCWSTR pwstrDeviceId) { return S_OK; }
+    STDMETHODIMP OnDeviceStateChanged(LPCWSTR pwstrDeviceId, DWORD dwNewState) { return S_OK; }
+    STDMETHODIMP OnPropertyValueChanged(LPCWSTR pwstrDeviceId, const PROPERTYKEY key) { return S_OK; }
+
+    STDMETHODIMP OnDefaultDeviceChanged(EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId);
+
+  private:
+    LONG cRef_;
+    Audio* audio_;
+    IMMDeviceEnumerator* deviceEnumerator_;
+};
+
 // Top level audio manager.
 class Audio {
   public:
@@ -88,6 +113,7 @@ class Audio {
     void loadTargetList();
 
     std::unique_ptr<AudioDevice> deviceSrc_;
+    std::unique_ptr<DeviceChangeMonitor> deviceChangeMonitor_;
     std::list<AudioDevice> deviceTargets_;
     VolumeMonitor* volumeMonitor_;
 };
