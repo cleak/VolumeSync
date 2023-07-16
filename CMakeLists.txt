@@ -41,8 +41,6 @@ set (CPACK_NSIS_MUI_ICON
 
 # Remove Registry kesy on uninstall
 set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
-    DeleteRegKey HKCU 'Software\\\\VolumeSync'
-    DeleteRegKey HKCU 'Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run' 'VolumeSync'
     DeleteRegValue HKCU 'Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run' 'VolumeSync'
 ")
 

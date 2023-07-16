@@ -1,62 +1,73 @@
 #include "Config.h"
 
-bool WriteSyncDevices(
-    const std::vector<std::wstring>& data,
-    const std::wstring& subKey,
-    const std::wstring& valueName
-) {
-    HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, subKey.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL) != ERROR_SUCCESS) {
+#include <windows.h>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <KnownFolders.h>
+#include <ShlObj.h>
+
+const std::wstring filename = L"SyncDevices.txt";
+const std::wstring subDir = L"AudioSync";
+
+bool CreateDirectoryIfNotExist(const std::wstring& path) {
+    DWORD dwAttrib = GetFileAttributesW(path.c_str());
+
+    if (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+        (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) {
+        return true;
+    }
+
+    return CreateDirectoryW(path.c_str(), NULL);
+}
+
+bool WriteSyncDevices(const std::vector<std::wstring>& data) {
+    PWSTR path = NULL;
+    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &path) != S_OK) {
         return false;
     }
 
-    for (size_t i = 0; i < data.size(); ++i) {
-        if (RegSetValueExW(hKey, (valueName + std::to_wstring(i)).c_str(), 0, REG_SZ, (BYTE*)data[i].c_str(), (DWORD)((data[i].size() + 1) * sizeof(wchar_t))) != ERROR_SUCCESS) {
-            RegCloseKey(hKey);
-            return false;
-        }
+    std::wstring fullPath(path);
+    fullPath += L"\\" + subDir;
+    CoTaskMemFree(path);
+
+    if (!CreateDirectoryIfNotExist(fullPath)) {
+        return false;
     }
 
-    RegCloseKey(hKey);
+    fullPath += L"\\" + filename;
+
+    std::wofstream file(fullPath);
+    if (!file) {
+        return false;
+    }
+
+    for (const auto& str : data) {
+        file << str << L'\n';
+    }
+
     return true;
 }
 
-bool ReadSyncDevices(
-    std::vector<std::wstring>& data,
-    const std::wstring& subKey,
-    const std::wstring& valueName
-) {
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, subKey.c_str(), 0, KEY_READ, &hKey) != ERROR_SUCCESS) {
+bool ReadSyncDevices(std::vector<std::wstring>& data) {
+    PWSTR path = NULL;
+    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &path) != S_OK) {
         return false;
     }
 
-    DWORD i = 0;
-    wchar_t value[256];
-    DWORD valueSize = sizeof(value);
-    while (RegEnumValueW(hKey, i, value, &valueSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
-        if (std::wstring(value).substr(0, valueName.size()) == valueName) {
-            DWORD dataSize;
-            if (RegQueryValueExW(hKey, value, NULL, NULL, NULL, &dataSize) != ERROR_SUCCESS) {
-                RegCloseKey(hKey);
-                return false;
-            }
+    std::wstring fullPath(path);
+    fullPath += L"\\" + subDir + L"\\" + filename;
+    CoTaskMemFree(path);
 
-            wchar_t* dataBuffer = new wchar_t[dataSize / sizeof(wchar_t)];
-            if (RegQueryValueExW(hKey, value, NULL, NULL, (BYTE*)dataBuffer, &dataSize) != ERROR_SUCCESS) {
-                delete[] dataBuffer;
-                RegCloseKey(hKey);
-                return false;
-            }
-
-            data.push_back(std::wstring(dataBuffer));
-            delete[] dataBuffer;
-        }
-
-        i++;
-        valueSize = sizeof(value);
+    std::wifstream file(fullPath);
+    if (!file) {
+        return false;
     }
 
-    RegCloseKey(hKey);
+    std::wstring line;
+    while (std::getline(file, line)) {
+        data.push_back(line);
+    }
+
     return true;
 }

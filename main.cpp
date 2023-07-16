@@ -43,6 +43,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 // Create the menu
                 HMENU hMenu = CreatePopupMenu();
 
+                AppendMenu(hMenu, MF_STRING | MF_GRAYED, 0, TEXT("Volume Sync"));
+                AppendMenu(hMenu, MF_SEPARATOR, ID_TRAY_EXIT, nullptr);
+
                 auto syncedDevices = audio->getSyncedDevices();
                 auto devices = audio->getDevices();
                 for (int i = 0; i < devices.size(); ++i) {
@@ -106,6 +109,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 // int main() {
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    HANDLE mutex = CreateMutex(NULL, TRUE, "VolumeSync_Service");
+    if (mutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (mutex) {
+            ReleaseMutex(mutex);
+        }
+        // Another instance is running
+        return 1;
+    }
+
 #ifdef _DEBUG 
     RedirectOutputToFile("log.txt");
 #endif // _DEBUG
@@ -148,5 +160,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
         DispatchMessage(&msg);
     }
 
+    ReleaseMutex(mutex);
+    CloseHandle(mutex);
     return (int)msg.wParam;
 }
