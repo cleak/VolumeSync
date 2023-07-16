@@ -74,11 +74,6 @@ void VolumeMonitor::Stop() {
     audio_ = nullptr;
 }
 
-/*
-    int64_t cRef_;
-    Audio* audio_;
-};*/
-
 //----------------------------------------------------------------------------------
 // Audio Device
 
@@ -213,6 +208,7 @@ Audio::Audio() : volumeMonitor_(nullptr) {
         printf("Failed to initialize COM: %x\n", hr);
         exit(1);
     }
+    
     loadTargetList();
     updateDefaultDevice();
     deviceChangeMonitor_ = std::make_unique<DeviceChangeMonitor>(this);
